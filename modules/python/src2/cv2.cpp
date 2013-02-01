@@ -16,6 +16,7 @@
 #include "opencv2/ml/ml.hpp"
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/objdetect/objdetect.hpp"
+#include "opencv2/softcascade/softcascade.hpp"
 #include "opencv2/video/tracking.hpp"
 #include "opencv2/video/background_segm.hpp"
 #include "opencv2/photo/photo.hpp"
@@ -96,6 +97,7 @@ catch (const cv::Exception &e) \
 }
 
 using namespace cv;
+typedef cv::softcascade::ChannelFeatureBuilder softcascade_ChannelFeatureBuilder;
 
 typedef vector<uchar> vector_uchar;
 typedef vector<int> vector_int;
@@ -123,6 +125,8 @@ typedef Ptr<FeatureDetector> Ptr_FeatureDetector;
 typedef Ptr<DescriptorExtractor> Ptr_DescriptorExtractor;
 typedef Ptr<Feature2D> Ptr_Feature2D;
 typedef Ptr<DescriptorMatcher> Ptr_DescriptorMatcher;
+
+typedef Ptr<cv::softcascade::ChannelFeatureBuilder> Ptr_ChannelFeatureBuilder;
 
 typedef SimpleBlobDetector::Params SimpleBlobDetector_Params;
 
@@ -224,9 +228,42 @@ static int pyopencv_to(const PyObject* o, Mat& m, const ArgInfo info, bool allow
         return true;
     }
 
+    if( PyInt_Check(o) )
+    {
+        double v[] = {PyInt_AsLong((PyObject*)o), 0., 0., 0.};
+        m = Mat(4, 1, CV_64F, v).clone();
+        return true;
+    }
+    if( PyFloat_Check(o) )
+    {
+        double v[] = {PyFloat_AsDouble((PyObject*)o), 0., 0., 0.};
+        m = Mat(4, 1, CV_64F, v).clone();
+        return true;
+    }
+    if( PyTuple_Check(o) )
+    {
+        int i, sz = (int)PyTuple_Size((PyObject*)o);
+        m = Mat(sz, 1, CV_64F);
+        for( i = 0; i < sz; i++ )
+        {
+            PyObject* oi = PyTuple_GET_ITEM(o, i);
+            if( PyInt_Check(oi) )
+                m.at<double>(i) = (double)PyInt_AsLong(oi);
+            else if( PyFloat_Check(oi) )
+                m.at<double>(i) = (double)PyFloat_AsDouble(oi);
+            else
+            {
+                failmsg("%s is not a numerical tuple", info.name);
+                m.release();
+                return false;
+            }
+        }
+        return true;
+    }
+
     if( !PyArray_Check(o) )
     {
-        failmsg("%s is not a numpy array", info.name);
+        failmsg("%s is not a numpy array, neither a scalar", info.name);
         return false;
     }
 
@@ -236,6 +273,7 @@ static int pyopencv_to(const PyObject* o, Mat& m, const ArgInfo info, bool allow
                typenum == NPY_BYTE ? CV_8S :
                typenum == NPY_USHORT ? CV_16U :
                typenum == NPY_SHORT ? CV_16S :
+               typenum == NPY_INT ? CV_32S :
                typenum == NPY_INT32 ? CV_32S :
                typenum == NPY_FLOAT ? CV_32F :
                typenum == NPY_DOUBLE ? CV_64F : -1;
@@ -245,7 +283,7 @@ static int pyopencv_to(const PyObject* o, Mat& m, const ArgInfo info, bool allow
         if( typenum == NPY_INT64 || typenum == NPY_UINT64 || type == NPY_LONG )
         {
             needcopy = needcast = true;
-            new_typenum = NPY_INT32;
+            new_typenum = NPY_INT;
             type = CV_32S;
         }
         else
@@ -442,7 +480,12 @@ static bool pyopencv_to(PyObject* obj, int& value, const char* name = "<unknown>
     (void)name;
     if(!obj || obj == Py_None)
         return true;
-    value = (int)PyInt_AsLong(obj);
+    if(PyInt_Check(obj))
+        value = (int)PyInt_AsLong(obj);
+    else if(PyLong_Check(obj))
+        value = (int)PyLong_AsLong(obj);
+    else
+        return false;
     return value != -1 || !PyErr_Occurred();
 }
 
@@ -714,7 +757,14 @@ template<typename _Tp> struct pyopencvVecConverter
                 PyObject* item_ij = items_i[j];
                 if( PyInt_Check(item_ij))
                 {
-                    int v = PyInt_AsLong(item_ij);
+                    int v = (int)PyInt_AsLong(item_ij);
+                    if( v == -1 && PyErr_Occurred() )
+                        break;
+                    data[j] = saturate_cast<_Cp>(v);
+                }
+                else if( PyLong_Check(item_ij))
+                {
+                    int v = (int)PyLong_AsLong(item_ij);
                     if( v == -1 && PyErr_Occurred() )
                         break;
                     data[j] = saturate_cast<_Cp>(v);

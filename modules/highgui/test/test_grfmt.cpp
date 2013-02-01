@@ -282,3 +282,49 @@ TEST(Highgui_ImreadVSCvtColor, regression)
 }
 #endif
 
+#ifdef HAVE_JPEG
+TEST(Highgui_Jpeg, encode_empty)
+{
+    cv::Mat img;
+    std::vector<uchar> jpegImg;
+
+    ASSERT_THROW(cv::imencode(".jpg", img, jpegImg), cv::Exception);
+}
+#endif
+
+
+#ifdef HAVE_TIFF
+
+// these defines are used to resolve conflict between tiff.h and opencv2/core/types_c.h
+#define uint64 uint64_hack_
+#define int64 int64_hack_
+#include "tiff.h"
+
+TEST(Highgui_Tiff, decode_tile16384x16384)
+{
+    // see issue #2161
+    cv::Mat big(16384, 16384, CV_8UC1, cv::Scalar::all(0));
+    string file3 = cv::tempfile(".tiff");
+    string file4 = cv::tempfile(".tiff");
+
+    std::vector<int> params;
+    params.push_back(TIFFTAG_ROWSPERSTRIP);
+    params.push_back(big.rows);
+    cv::imwrite(file4, big, params);
+    cv::imwrite(file3, big.colRange(0, big.cols - 1), params);
+    big.release();
+
+    try
+    {
+        cv::imread(file3);
+        EXPECT_NO_THROW(cv::imread(file4));
+    }
+    catch(const std::bad_alloc&)
+    {
+        // have no enough memory
+    }
+
+    remove(file3.c_str());
+    remove(file4.c_str());
+}
+#endif
