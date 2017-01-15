@@ -1374,6 +1374,17 @@ static PyMethodDef special_methods[] = {
 /************************************************************************/
 /* Module init */
 
+void * PyOpenCV_API[] = {
+    // 0: PyOpenCV_MatToNdarray
+    reinterpret_cast<void*>(static_cast<PyObject * (*)(const Mat&)>(&pyopencv_from)),
+    // 1: PyOpenCV_NdarrayToMat
+    reinterpret_cast<void*>(static_cast<bool (*)(PyObject *, Mat&, const char *)>(&pyopencv_to)),
+    // 2: PyOpenCV_UMatToNdarray
+    reinterpret_cast<void*>(static_cast<PyObject * (*)(const UMat&)>(&pyopencv_from)),
+    // 3: PyOpenCV_NdarrayToUMat
+    reinterpret_cast<void*>(static_cast<bool (*)(PyObject *, UMat&, const char *)>(&pyopencv_to)),
+};
+
 struct ConstDef
 {
     const char * name;
@@ -1485,6 +1496,10 @@ void initcv2()
   _Py_INC_REFTOTAL _Py_REF_DEBUG_COMMA (&cv2_UMatWrapperType)->ob_refcnt++;
 #endif
   PyModule_AddObject(m, "UMat", (PyObject *)&cv2_UMatWrapperType);
+
+PyObject * c_api = PyCapsule_New(PyArray_API, NULL, NULL);
+PyDict_SetItemString(d, "_OPENCV_API", c_api);
+    Py_DECREF(c_api);
 
 #define PUBLISH(I) PyDict_SetItemString(d, #I, PyInt_FromLong(I))
 //#define PUBLISHU(I) PyDict_SetItemString(d, #I, PyLong_FromUnsignedLong(I))
